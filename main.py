@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 import re
+import hashlib
+import requests
 
 
 class Validator(ABC):
@@ -12,7 +14,7 @@ class Validator(ABC):
         pass
 
 
-class LenghtValidator(Validator):
+class LengthValidator(Validator):
     def __init__(self, text, lenght=8):
         self.text = text
         self.lenght = lenght
@@ -73,9 +75,36 @@ class PasswordLeakValidator(Validator):
         self.text = text
 
     def is_valid(self):
-        pass
+        password_hash = hashlib.sha1(
+            self.text.encode("utf-8")).hexdigest().upper()
+        response = requests.get(
+            "https://api.pwnedpasswords.com/range/" + password_hash[0:5])
+        hash_suffixes = (line.split(":")
+                         for line in response.text.splitlines())
+        for suffix, count in hash_suffixes:
+            if password_hash[5:] == suffix:
+                return False
+        return True
 
 
-class PasswordValidator():
+class PasswordValidator:
     def __init__(self, text):
-        pass
+        self.validators = [
+            LengthValidator(text),
+            NumberValidator(text),
+            SpecialCharactersValidator(text),
+            UpperCharactersValidator(text),
+            LowerCharactersValidator(text),
+            PasswordLeakValidator(text)
+        ]
+
+    def is_valid(self):
+        return all(validator.is_valid() for validator in self.validators)
+
+
+hasło = "hhfhfhhfhdkkdkkd"
+validator = PasswordValidator(hasło)
+if validator.is_valid():
+    print("Hasło jest dobre")
+else:
+    print("Hasło jest złe")
